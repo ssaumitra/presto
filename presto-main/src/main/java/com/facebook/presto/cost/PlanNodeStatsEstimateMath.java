@@ -13,7 +13,9 @@
  */
 package com.facebook.presto.cost;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import java.util.LinkedList;
+import java.util.List;
+
 import static java.lang.Double.NaN;
 import static java.lang.Double.isNaN;
 import static java.lang.Double.max;
@@ -165,38 +167,62 @@ public class PlanNodeStatsEstimateMath
         return addStats(left, right, StatisticRange::addAndCollapseDistinctValues);
     }
 
-    private static PlanNodeStatsEstimate addStats(PlanNodeStatsEstimate left, PlanNodeStatsEstimate right, RangeAdditionStrategy strategy)
+    public static PlanNodeStatsEstimate addStatsAndIntersect(PlanNodeStatsEstimate left, PlanNodeStatsEstimate right)
     {
         if (left.isOutputRowCountUnknown() || right.isOutputRowCountUnknown()) {
             return PlanNodeStatsEstimate.unknown();
         }
 
         PlanNodeStatsEstimate.Builder statsBuilder = PlanNodeStatsEstimate.builder();
-        double newRowCount = left.getOutputRowCount() + right.getOutputRowCount();
+        double estimatedRowCount = Math.min(left.getOutputRowCount(), right.getOutputRowCount());
 
+        List<Double> allRowCounts = buildVariableStatistics(
+                left, right, statsBuilder, estimatedRowCount, StatisticRange::intersect);
+
+        double preciseRowCount = allRowCounts.stream().reduce(estimatedRowCount, Double::min);
+        return statsBuilder.setOutputRowCount(preciseRowCount).build();
+    }
+
+    private static PlanNodeStatsEstimate addStats(PlanNodeStatsEstimate left, PlanNodeStatsEstimate right,
+            RangeAdditionStrategy rangeAdder)
+    {
+        if (left.isOutputRowCountUnknown() || right.isOutputRowCountUnknown()) {
+            return PlanNodeStatsEstimate.unknown();
+        }
+
+        PlanNodeStatsEstimate.Builder statsBuilder = PlanNodeStatsEstimate.builder();
+        double rowCount = left.getOutputRowCount() + right.getOutputRowCount();
+        buildVariableStatistics(left, right, statsBuilder, rowCount, rangeAdder);
+
+        return statsBuilder.setOutputRowCount(rowCount).build();
+    }
+
+    private static List<Double> buildVariableStatistics(PlanNodeStatsEstimate left, PlanNodeStatsEstimate right,
+            PlanNodeStatsEstimate.Builder statsBuilder, double estimatedRowCount, RangeAdditionStrategy rangeAdder)
+    {
+        List<Double> allRowCounts = new LinkedList<>();
         concat(left.getVariablesWithKnownStatistics().stream(), right.getVariablesWithKnownStatistics().stream())
                 .distinct()
                 .forEach(symbol -> {
                     VariableStatsEstimate symbolStats = VariableStatsEstimate.zero();
-                    if (newRowCount > 0) {
+                    if (estimatedRowCount > 0) {
                         symbolStats = addColumnStats(
                                 left.getVariableStatistics(symbol),
                                 left.getOutputRowCount(),
                                 right.getVariableStatistics(symbol),
                                 right.getOutputRowCount(),
-                                newRowCount,
-                                strategy);
+                                estimatedRowCount,
+                                rangeAdder);
                     }
                     statsBuilder.addVariableStatistics(symbol, symbolStats);
+                    allRowCounts.add(symbolStats.getDistinctValuesCount());
                 });
-
-        return statsBuilder.setOutputRowCount(newRowCount).build();
+        return allRowCounts;
     }
 
-    private static VariableStatsEstimate addColumnStats(VariableStatsEstimate leftStats, double leftRows, VariableStatsEstimate rightStats, double rightRows, double newRowCount, RangeAdditionStrategy strategy)
+    private static VariableStatsEstimate addColumnStats(VariableStatsEstimate leftStats, double leftRows,
+            VariableStatsEstimate rightStats, double rightRows, double newApproxRowCount, RangeAdditionStrategy strategy)
     {
-        checkArgument(newRowCount > 0, "newRowCount must be greater than zero");
-
         StatisticRange leftRange = StatisticRange.from(leftStats);
         StatisticRange rightRange = StatisticRange.from(rightStats);
 
@@ -205,8 +231,8 @@ public class PlanNodeStatsEstimateMath
         double nullsCountLeft = leftStats.getNullsFraction() * leftRows;
         double totalSizeLeft = (leftRows - nullsCountLeft) * leftStats.getAverageRowSize();
         double totalSizeRight = (rightRows - nullsCountRight) * rightStats.getAverageRowSize();
-        double newNullsFraction = (nullsCountLeft + nullsCountRight) / newRowCount;
-        double newNonNullsRowCount = newRowCount * (1.0 - newNullsFraction);
+        double newNullsFraction = (nullsCountLeft + nullsCountRight) / newApproxRowCount;
+        double newNonNullsRowCount = newApproxRowCount * (1.0 - newNullsFraction);
 
         // FIXME, weights to average. left and right should be equal in most cases anyway
         double newAverageRowSize = newNonNullsRowCount == 0 ? 0 : ((totalSizeLeft + totalSizeRight) / newNonNullsRowCount);
