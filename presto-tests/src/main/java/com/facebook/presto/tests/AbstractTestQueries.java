@@ -8203,6 +8203,25 @@ public abstract class AbstractTestQueries
     }
 
     @Test
+    public void testJoinsWithNulls()
+    {
+        assertQuery("SELECT * FROM (VALUES 2, 3, null) a(x) INNER JOIN (VALUES 3, 4, null) b(x) ON a.x = b.x",
+                "SELECT * FROM VALUES (3, 3)");
+
+        assertQuery("SELECT * FROM (VALUES 2, 3, null) a(x) LEFT JOIN (VALUES 3, 4, null) b(x) ON a.x = b.x",
+                "SELECT * FROM VALUES (3, 3), (2, NULL), (NULL, NULL)");
+
+        assertQuery("SELECT * FROM (VALUES 2, 3, null) a(x) RIGHT JOIN (VALUES 3, 4, null) b(x) ON a.x = b.x",
+                "SELECT * FROM VALUES (3, 3), (NULL, 4), (NULL, NULL)");
+
+        assertQuery("SELECT * FROM (VALUES 2, 3, null) a(x) FULL OUTER JOIN (VALUES 3, 4, null) b(x) ON a.x = b.x",
+                "SELECT * FROM VALUES (3, 3), (NULL, 4), (2, NULL), (NULL, NULL), (NULL, NULL)");
+
+        assertQuery("SELECT * FROM (VALUES 2, 3, null) a(x) FULL OUTER JOIN (VALUES 3, 4, null) b(x) ON a.x = b.x WHERE a.x IS NULL",
+                "SELECT * FROM VALUES (NULL, 4), (NULL, NULL), (NULL, NULL)");
+    }
+
+    @Test
     public void testPruningCountAggregationOverScalar()
     {
         assertQuery("SELECT COUNT(*) FROM (SELECT SUM(orderkey) FROM orders)");
