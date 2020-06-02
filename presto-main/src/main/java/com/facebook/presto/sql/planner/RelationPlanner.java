@@ -405,17 +405,19 @@ class RelationPlanner
 
     private void addNullFilters(List<Expression> conditions, Join.Type joinType, Expression left, Expression right)
     {
-        switch (joinType) {
-            case INNER:
-                addNullFilterIfSupported(conditions, left);
-                addNullFilterIfSupported(conditions, right);
-                break;
-            case LEFT:
-                addNullFilterIfSupported(conditions, right);
-                break;
-            case RIGHT:
-                addNullFilterIfSupported(conditions, left);
-                break;
+        if (SystemSessionProperties.isOptimizeNullsInJoin(session)) {
+            switch (joinType) {
+                case INNER:
+                    addNullFilterIfSupported(conditions, left);
+                    addNullFilterIfSupported(conditions, right);
+                    break;
+                case LEFT:
+                    addNullFilterIfSupported(conditions, right);
+                    break;
+                case RIGHT:
+                    addNullFilterIfSupported(conditions, left);
+                    break;
+            }
         }
     }
 
