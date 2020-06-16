@@ -38,6 +38,7 @@ import com.facebook.presto.sql.planner.iterative.rule.EliminateCrossJoins;
 import com.facebook.presto.sql.planner.iterative.rule.EvaluateZeroLimit;
 import com.facebook.presto.sql.planner.iterative.rule.EvaluateZeroSample;
 import com.facebook.presto.sql.planner.iterative.rule.ExtractSpatialJoins;
+import com.facebook.presto.sql.planner.iterative.rule.FilterNullsInJoin;
 import com.facebook.presto.sql.planner.iterative.rule.GatherAndMergeWindows;
 import com.facebook.presto.sql.planner.iterative.rule.ImplementBernoulliSampleAsFilter;
 import com.facebook.presto.sql.planner.iterative.rule.ImplementFilteredAggregations;
@@ -270,6 +271,11 @@ public class PlanOptimizers
                                 .addAll(new DesugarTryExpression().rules())
                                 .addAll(new DesugarRowSubscript(metadata, sqlParser).rules())
                                 .build()),
+                new IterativeOptimizer(
+                        ruleStats,
+                        statsCalculator,
+                        costCalculator,
+                        ImmutableSet.of(new FilterNullsInJoin())),
                 new IterativeOptimizer(
                         ruleStats,
                         statsCalculator,

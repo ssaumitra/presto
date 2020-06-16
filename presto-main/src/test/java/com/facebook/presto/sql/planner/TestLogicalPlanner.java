@@ -988,7 +988,7 @@ public class TestLogicalPlanner
                         join(INNER, ImmutableList.of(equiJoinClause("l_suppkey", "p_suppkey")),
                                 anyTree(
                                         filter(
-                                                "l_comment = '42' AND l_suppkey IS NOT NULL",
+                                                "l_comment = '42' AND l_suppkey IS NOT NULL AND CAST(l_comment AS VARCHAR) IS NOT NULL",
                                                 tableScan("lineitem", ImmutableMap.of("l_suppkey", "suppkey", "l_comment", "comment")))),
                                 anyTree(
                                         filter(
@@ -1074,53 +1074,38 @@ public class TestLogicalPlanner
     @Test
     public void testJoinNullFilters()
     {
-        assertPlan("SELECT nationkey FROM nation INNER JOIN region ON nation.regionkey = region.regionkey",
+        assertPlan("SELECT x FROM (VALUES 1, 2, null) a(x) INNER JOIN (VALUES 2, 3, null) b(y) ON x = y",
                 anyTree(
                         join(
                                 INNER,
-                                ImmutableList.of(equiJoinClause("NATION_REGIONKEY", "REGION_REGIONKEY")),
+                                ImmutableList.of(equiJoinClause("leftKey", "rightKey")),
                                 anyTree(
-                                        filter("NATION_REGIONKEY IS NOT NULL",
-                                                tableScan(
-                                                        "nation",
-                                                        ImmutableMap.of("NATION_REGIONKEY", "regionkey")))),
+                                        filter("leftKey IS NOT NULL",
+                                                values(ImmutableList.of("leftKey")))),
                                 anyTree(
-                                        filter("region_REGIONKEY IS NOT NULL",
-                                                tableScan(
-                                                        "region",
-                                                        ImmutableMap.of(
-                                                                "REGION_REGIONKEY", "regionkey")))))));
+                                        filter("rightKey IS NOT NULL",
+                                                values(ImmutableList.of("rightKey")))))));
 
-        assertPlan("SELECT nationkey FROM nation LEFT JOIN region ON nation.regionkey = region.regionkey",
+        assertPlan("SELECT x FROM (VALUES 1, 2, null) a(x) LEFT JOIN (VALUES 2, 3, null) b(y) ON x = y",
                 anyTree(
                         join(
                                 LEFT,
-                                ImmutableList.of(equiJoinClause("NATION_REGIONKEY", "REGION_REGIONKEY")),
+                                ImmutableList.of(equiJoinClause("leftKey", "rightKey")),
                                 anyTree(
-                                            tableScan(
-                                                    "nation",
-                                                    ImmutableMap.of("NATION_REGIONKEY", "regionkey"))),
+                                        values(ImmutableList.of("leftKey"))),
                                 anyTree(
-                                        filter("region_REGIONKEY IS NOT NULL",
-                                                tableScan(
-                                                        "region",
-                                                        ImmutableMap.of(
-                                                                "REGION_REGIONKEY", "regionkey")))))));
+                                        filter("rightKey IS NOT NULL",
+                                                values(ImmutableList.of("rightKey")))))));
 
-        assertPlan("SELECT nationkey FROM nation RIGHT JOIN region ON nation.regionkey = region.regionkey",
+        assertPlan("SELECT x FROM (VALUES 1, 2, null) a(x) RIGHT JOIN (VALUES 2, 3, null) b(y) ON x = y",
                 anyTree(
                         join(
                                 RIGHT,
-                                ImmutableList.of(equiJoinClause("NATION_REGIONKEY", "REGION_REGIONKEY")),
+                                ImmutableList.of(equiJoinClause("leftKey", "rightKey")),
                                 anyTree(
-                                        filter("NATION_REGIONKEY IS NOT NULL",
-                                                tableScan(
-                                                        "nation",
-                                                        ImmutableMap.of("NATION_REGIONKEY", "regionkey")))),
+                                        filter("leftKey IS NOT NULL",
+                                                values(ImmutableList.of("leftKey")))),
                                 anyTree(
-                                        tableScan(
-                                                "region",
-                                                ImmutableMap.of(
-                                                "REGION_REGIONKEY", "regionkey"))))));
+                                        values(ImmutableList.of("rightKey"))))));
     }
 }
